@@ -7,6 +7,7 @@ use DateTime;
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
+use GuzzleHttp\Psr7\Header;
 use GuzzleHttp\RetryMiddleware;
 use GuzzleHttp\TransferStats;
 use Psr\Http\Message\RequestInterface;
@@ -30,17 +31,11 @@ class ClientResume implements ClientResumeInterface
     public function __construct(protected ?Client $client = null)
     {
         if(!$this->client) {
-            $this->client = new Client(['base'=> "http://hola/a/b"]);
+            $this->client = new Client();
         }
         $this->stack = HandlerStack::create();
-        // print_r(Middleware::retry($this->reSend()));exit;
-        // $this->config = collect(['verify' => false, 'http_errors' => false,'handler' => $this->stack]);
-        // $this->stack->push(Middleware::mapRequest($this->requestMiddleware()));
-        // $this->stack->push(Middleware::mapResponse($this->responseHandler()));
         $this->stack->push(Middleware::retry($this->reSend(), $this->delayBetweenRequest()));
         $this->stack->push(Middleware::mapRequest($this->requestMiddleware()));
-        // $this->stack->push(new RetryMiddleware($this->reSend(), $this->nextHandler()));
-
     }
 
     private function delayBetweenRequest() : callable
@@ -55,47 +50,26 @@ class ClientResume implements ClientResumeInterface
         $this->filename = $filename;
     }
 
+    public function resume($method, $url, $options)
+    {
+        $options['handler'] = $this->stack;
+         if(Log::$debug) {
+            $options['on_stats'] = function(TransferStats $stats) {
+                $this->dumpStats($stats);
+            };
+        }
+        $this->client->request($method, $url, $options);
+    }
+
     protected function requestMiddleware()
     {
         return function(RequestInterface $request){
             Log::debug("log", "starting request middleware");
-            if(is_file("$this->filename.part")) {
-                $rangeStart = filesize("$this->filename.part") + 1;
-                $rangeEnd   = $rangeStart + $this->downloadSize;
-                Log::debug("log", "setting range file exist: $this->rangeUnit=$rangeStart-$rangeEnd");
-                return $request->withHeader("Range", "$this->rangeUnit=$rangeStart-$rangeEnd");
+            if (empty($this->filename)) {
+                $this->createFilenameFromRequest($request);
+                Log::debug("log", "file wasn't set, creating filename from request: $this->filename" );
             }
-
-            if (is_null($this->filename)) {
-               $filename = pathinfo($request->getUri()->getQuery())['filename'];
-               $this->filename = __DIR__ . (new \DateTime())->format('Y-m-d_H-i-s') . "_$filename";
-            }
-            Log::debug("log", "setting range no file: $this->filename");
-            return $request->withHeader("Range", "$this->rangeUnit=0-$this->downloadSize");
-        };
-    }
-
-    protected function responseHandler() : callable
-    {
-        return function(ResponseInterface $response) {
-            Log::debug("log", "starting response middleware");
-            $this->response = $response;
-            if($response->getStatusCode() == 200) {
-                //No ranges from server, whole file
-                $this->makePath($this->filename);
-                file_put_contents($this->filename, $response->getBody());
-                Log::debug("log", "response 200 file: $this->filename");
-                return $response;
-            }
-
-            if($response->getStatusCode() == 416) {
-                //Invalid range
-                Log::debug("log", "invalid range");
-                return $response;
-            }
-            file_put_contents($this->filename, $response->getBody());
-            Log::debug("log", "partial content " . $response->getStatusCode());
-            return $response;
+            return $request->withHeader("Range", $this->getRangeForRequest());
         };
     }
 
@@ -107,72 +81,85 @@ class ClientResume implements ClientResumeInterface
                         \Exception $exception = null
         ){
             Log::debug("log", "starting retry middleware");
-            if(!is_null($response)) {
-                if($response->getStatusCode() == 206) {
-                    // if($retries >= 10) {
-                    //     Log::debug("log", " retries: $retries, return false");
-                    //     return false;
-                    // }
 
-                    $rangeHeader = $response->getHeader("Content-Range")[0];
-                    list($rangeUnit, $rangeData) = explode(" ", $rangeHeader);
-                    list($range, $filesize) = explode("/", $rangeData);
-                    list($start, $end) = explode("-", $range);
-                    if($end +1 == $filesize) {
-                        Log::debug("log", " retries: $retries , finished" . PHP_EOL);
-                        file_put_contents("$this->filename.part", $response->getBody(), FILE_APPEND);
-                        rename("$this->filename.part", $this->filename);
-                        return false;
-                    }
-                    file_put_contents("$this->filename.part", $response->getBody(), FILE_APPEND);
+            if(!is_null($response) && $response->getStatusCode() == 206 ) {
 
-                    Log::debug("log", " retries: $retries" . PHP_EOL);
-                    return true;
+                list($end, $filesize) = $this->parseResponseHeaderRange($response);
+                if($end +1 == $filesize) {
+                    Log::debug("log", " download finished, retries: $retries" . PHP_EOL);
+                    $this->savingFileFromResponse($response);
+                    rename("$this->filename.part", $this->filename);
+                    return false;
                 }
+
+                $this->savingFileFromResponse($response);
+                Log::debug("log", " saving partial data" . PHP_EOL);
+                return true;
             }
-            if($retries >= 10) {
-                Log::debug("log", " retries: $retries, return false");
+
+            Log::debug("log"," retries: $retries, location:end of method for RetryMiddleware" . PHP_EOL );
+
+            if($retries >=5) {
                 return false;
             }
-            Log::debug("log"," retries: $retries, return true" . PHP_EOL );
+
             return true;
-
         };
     }
 
-    private function nextHandler()
+
+    private function parseResponseHeaderRange(ResponseInterface $response): array
     {
-        return function(RequestInterface $request, $options) {
-            Log::debug('aparte.txt', json_encode($options), FILE_APPEND);
-            if(is_file("$this->filename.part")) {
-                $rangeStart = filesize("$this->filename.part") + 1;
-                $rangeEnd   = $rangeStart + $this->downloadSize;
-                Log::debug("log", "setting range in retry middleware file exist: $this->rangeUnit=$rangeStart-$rangeEnd");
-                $request->withHeader("Range", "$this->rangeUnit=$rangeStart-$rangeEnd");
-            }
-            return $request;
-        };
+        $rangeHeader = $response->getHeader("Content-Range")[0];
+        list($rangeUnit, $rangeData) = explode(" ", $rangeHeader);
+        list($range, $filesize) = explode("/", $rangeData);
+        list($start, $end) = explode("-", $range);
+        return [$end, $filesize];
     }
 
-    public function resume($method, $url, $options)
+    private function getRangeForRequest()
     {
-        $options['handler'] = $this->stack;
-         if(true) {
-            $options['on_stats'] = function(TransferStats $stats) {
-                $request = $stats->getRequest();
-                $response = $stats->getResponse();
-                $data = "-- url: ".  $request->getUri() . " headers: " . json_encode($request->getHeaders()) . "----- responseHeaders: " . json_encode($response->getHeaders());
-                if(false) {
-                    $data .= " body: " . $response->getBody() . PHP_EOL;
-                } else {
-                    $data .= PHP_EOL;
-                }
-                $statsPath = "debug/stats/guzzle_stats.txt";
-                $this->makePath($statsPath);
-                file_put_contents($statsPath, $data, FILE_APPEND);($stats);
-            };
+        if(is_file("$this->filename.part")) {
+            $rangeStart = filesize("$this->filename.part") + 1;
+            $rangeEnd   = $rangeStart + $this->downloadSize;
+            $range = "$this->rangeUnit=$rangeStart-$rangeEnd";
+            Log::debug("log", "filename exist, setting range: $range");
+            return $range;
         }
-        $this->client->request($method, $url, $options);
+        $range = "$this->rangeUnit=0-$this->downloadSize";
+        Log::debug("log", "filename doesn't exist, setting range: $range");
+        return $range;
+    }
+
+    private function createFilenameFromRequest(RequestInterface $request)
+    {
+        $filename = pathinfo($request->getUri())['filename'];
+        $filename = $request->getUri()->getQuery();
+        $filename = Header::parse($filename)[0] ?? [$request->getUri()->getPath()];
+        $filename = $filename[array_key_first($filename)];
+        if(!empty($filename)) {
+            return $this->filename = $filename;
+        }
+        return $this->filename = $request->getUri()->getHost();
+    }
+
+    private function savingFileFromResponse(ResponseInterface $response): void
+    {
+        file_put_contents("$this->filename.part", $response->getBody(), FILE_APPEND);
+    }
+
+    private function dumpStats(TransferStats $stats)
+    {
+        $request = $stats->getRequest();
+        $response = $stats->getResponse();
+        $data = "-- url: ".  $request->getUri() . " headers: " . json_encode($request->getHeaders()) . "----- responseHeaders: " . json_encode($response->getHeaders());
+        if(Log::$debugVerbose) {
+            $data .= " body: " . $response->getBody() . PHP_EOL;
+        } else {
+            $data .= PHP_EOL;
+        }
+        $statsPath = "stats/guzzle_stats.txt";
+        Log::debug($statsPath, $data);
     }
 
      // gotten from internet.

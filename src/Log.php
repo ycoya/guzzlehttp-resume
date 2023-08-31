@@ -30,8 +30,7 @@ class Log
         self::makePath("debug/$folderName.log");
         $date = self::getDate('Y-m-d_H-i-s');
         $dateLog = self::getDate('Y-m-d');
-        file_put_contents("debug/$folderName.log", "$date----$info" . PHP_EOL, FILE_APPEND);
-        file_put_contents("debug/$dateLog.log", "$date----$info" . PHP_EOL, FILE_APPEND);
+        file_put_contents("debug/$folderName-$dateLog.log", "$date----$info" . PHP_EOL, FILE_APPEND);
     }
 
 
