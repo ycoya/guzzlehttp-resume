@@ -1,0 +1,15 @@
+{
+    "name": "ycoya/guzzlehttp-resume",
+    "description": "To download by range a resource and be able to resume the download if it has been interrupted.",
+    "type": "library",
+    "require": {
+        "guzzlehttp/guzzle": "^7.8"
+    },
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Ycoya\\GuzzlehttpResume\\": "src/"
+        }
+    },
+    "minimum-stability": "stable"
+}
