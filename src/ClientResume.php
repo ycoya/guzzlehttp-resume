@@ -7,6 +7,7 @@ use DateTime;
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
+use GuzzleHttp\RetryMiddleware;
 use GuzzleHttp\TransferStats;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -32,14 +33,22 @@ class ClientResume implements ClientResumeInterface
             $this->client = new Client(['base'=> "http://hola/a/b"]);
         }
         $this->stack = HandlerStack::create();
+        // print_r(Middleware::retry($this->reSend()));exit;
         // $this->config = collect(['verify' => false, 'http_errors' => false,'handler' => $this->stack]);
+        // $this->stack->push(Middleware::mapRequest($this->requestMiddleware()));
+        // $this->stack->push(Middleware::mapResponse($this->responseHandler()));
+        $this->stack->push(Middleware::retry($this->reSend(), $this->delayBetweenRequest()));
         $this->stack->push(Middleware::mapRequest($this->requestMiddleware()));
-        $this->stack->push(Middleware::mapResponse($this->responseHandler()));
-        $this->stack->push(Middleware::retry($this->reSend()));
+        // $this->stack->push(new RetryMiddleware($this->reSend(), $this->nextHandler()));
 
     }
 
-
+    private function delayBetweenRequest() : callable
+    {
+        return function($retries) {
+            return 0.5 * 1000;
+        };
+    }
 
     public function setFilename(string $filename)
     {
@@ -62,7 +71,7 @@ class ClientResume implements ClientResumeInterface
                $this->filename = __DIR__ . (new \DateTime())->format('Y-m-d_H-i-s') . "_$filename";
             }
             Log::debug("log", "setting range no file: $this->filename");
-            return $request->withHeader("Range", "$this->rangeUnit=1-$this->downloadSize");
+            return $request->withHeader("Range", "$this->rangeUnit=0-$this->downloadSize");
         };
     }
 
@@ -100,11 +109,11 @@ class ClientResume implements ClientResumeInterface
             Log::debug("log", "starting retry middleware");
             if(!is_null($response)) {
                 if($response->getStatusCode() == 206) {
-                    if($retries >= 10) {
-                        Log::debug("log", " retries: $retries, return false");
-                        return false;
-                    }
-                    
+                    // if($retries >= 10) {
+                    //     Log::debug("log", " retries: $retries, return false");
+                    //     return false;
+                    // }
+
                     $rangeHeader = $response->getHeader("Content-Range")[0];
                     list($rangeUnit, $rangeData) = explode(" ", $rangeHeader);
                     list($range, $filesize) = explode("/", $rangeData);
@@ -116,12 +125,7 @@ class ClientResume implements ClientResumeInterface
                         return false;
                     }
                     file_put_contents("$this->filename.part", $response->getBody(), FILE_APPEND);
-                    if(is_file("$this->filename.part")) {
-                        $rangeStart = filesize("$this->filename.part") + 1;
-                        $rangeEnd   = $rangeStart + $this->downloadSize;
-                        Log::debug("log", "setting range in retry middleware file exist: $this->rangeUnit=$rangeStart-$rangeEnd");
-                        $request->withHeader("Range", "$this->rangeUnit=$rangeStart-$rangeEnd");
-                    }
+
                     Log::debug("log", " retries: $retries" . PHP_EOL);
                     return true;
                 }
@@ -133,6 +137,20 @@ class ClientResume implements ClientResumeInterface
             Log::debug("log"," retries: $retries, return true" . PHP_EOL );
             return true;
 
+        };
+    }
+
+    private function nextHandler()
+    {
+        return function(RequestInterface $request, $options) {
+            Log::debug('aparte.txt', json_encode($options), FILE_APPEND);
+            if(is_file("$this->filename.part")) {
+                $rangeStart = filesize("$this->filename.part") + 1;
+                $rangeEnd   = $rangeStart + $this->downloadSize;
+                Log::debug("log", "setting range in retry middleware file exist: $this->rangeUnit=$rangeStart-$rangeEnd");
+                $request->withHeader("Range", "$this->rangeUnit=$rangeStart-$rangeEnd");
+            }
+            return $request;
         };
     }
 

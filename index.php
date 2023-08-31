@@ -12,6 +12,7 @@ $client = new ClientResume();
 $url = "http://virtualrepomaven2.com.test?file=V_20230702_195006_ES6.mp4";
 
 $client->downloadSize = 1024*1024*100;
+// $client->downloadSize = 1024;
 $client->setFilename('V_20230702_195006_ES6.mp4');
 $options = [
     'verify' => false,
