@@ -10,7 +10,7 @@ interface ClientResumeInterface
 {
     public function resume($method, $url, $options): void;
 
-    public function setFilename(string $filename): void;
+    public function setFilePath(string $filePath): void;
 
     public function setClient(Client $client);
 
