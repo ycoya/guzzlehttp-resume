@@ -1,11 +1,11 @@
 <?php
-//phpcs:disable comment
-namespace Ycoya\GuzzlehttpResume\Interfaces;
+
+namespace Ycoya\GuzzleHttpResume\Interfaces;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 
-//phpcs:disable comment
+
 interface ClientResumeInterface
 {
     public function resume($method, $url, $options): void;

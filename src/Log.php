@@ -1,5 +1,5 @@
 <?php
-namespace Ycoya\GuzzlehttpResume;
+namespace Ycoya\GuzzleHttpResume;
 
 
 use Carbon\Carbon;
@@ -28,7 +28,7 @@ class Log
     private static function _debug($folderName, $info)
     {
         self::makePath("debug/$folderName.log");
-        $date = self::getDate('Y-m-d_H-i-s');
+        $date = self::getDate('Y-m-d H:i:s');
         $dateLog = self::getDate('Y-m-d');
         file_put_contents("debug/$folderName-$dateLog.log", "$date----$info" . PHP_EOL, FILE_APPEND);
     }
