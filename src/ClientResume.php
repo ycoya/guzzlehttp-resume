@@ -126,13 +126,13 @@ class ClientResume implements ClientResumeInterface
             if ($response->getStatusCode() == 206) {
                 list($endRange, $filesize) = $this->parseResponseHeaderRange($response);
                 if ($endRange + 1 == $filesize) {
-                    Log::debug("log", " download finished, retries: $retries" . PHP_EOL);
+                    Log::debug("log", " download finished, times: $retries" . PHP_EOL);
                     $this->savingFileFromResponse($response);
                     rename("$this->filePath.part", $this->filePath);
                     return false;
                 }
                 $this->savingFileFromResponse($response);
-                Log::debug("log", " saving partial data retries: $retries" . PHP_EOL);
+                Log::debug("log", " saving partial data times: $retries" . PHP_EOL);
                 return $this->isRangeUpdated($retries, $endRange);
             }
             if($retries == 0) {
