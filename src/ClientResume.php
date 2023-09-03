@@ -2,7 +2,6 @@
 
 namespace Ycoya\GuzzleHttpResume;
 
-// require 'vendor/autoload.php';
 
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
@@ -64,7 +63,6 @@ class ClientResume implements ClientResumeInterface
     public function setfilePath(string $filePath): void
     {
         $this->filePath = $filePath;
-        $this->makePath($this->filePath);
     }
 
     public function setDebug(bool $debug)
@@ -93,8 +91,8 @@ class ClientResume implements ClientResumeInterface
 
     private function addRequiredMiddleware()
     {
-        $this->stack->push(Middleware::retry($this->reTry(), $this->delayBetweenRequest()));
-        $this->stack->push(Middleware::mapRequest($this->requestMiddleware()));
+        $this->stack->after('prepare_body',Middleware::retry($this->reTry(), $this->delayBetweenRequest()), 'resume_download');
+        $this->stack->after('resume_download',Middleware::mapRequest($this->requestMiddleware()), 'update_range_header');
     }
 
     protected function requestMiddleware()
@@ -102,9 +100,8 @@ class ClientResume implements ClientResumeInterface
         return function (RequestInterface $request) {
             Log::debug("log", "starting request middleware");
             if (empty($this->filePath)) {
+                Log::debug("log", "file wasn't set, composing filename from request: $this->filePath");
                 $this->createFilePathFromRequest($request);
-                $this->makePath($this->filePath);
-                Log::debug("log", "file wasn't set, creating filePath from request: $this->filePath");
             }
             return $request->withHeader("Range", $this->getRangeForRequest());
         };
@@ -114,7 +111,7 @@ class ClientResume implements ClientResumeInterface
     {
         return function (
             $retries,
-            RequestInterface &$request,
+            RequestInterface $request,
             ResponseInterface $response = null,
             \Exception $exception = null
         ) {
@@ -123,22 +120,20 @@ class ClientResume implements ClientResumeInterface
                 Log::debug("log", "response null, possible error in connection");
                 return false;
             }
+
             if ($response->getStatusCode() == 206) {
-                list($endRange, $filesize) = $this->parseResponseHeaderRange($response);
-                if ($endRange + 1 == $filesize) {
-                    Log::debug("log", " download finished, times: $retries" . PHP_EOL);
-                    $this->savingFileFromResponse($response);
-                    rename("$this->filePath.part", $this->filePath);
-                    return false;
-                }
-                $this->savingFileFromResponse($response);
-                Log::debug("log", " saving partial data times: $retries" . PHP_EOL);
-                return $this->isRangeUpdated($retries, $endRange);
+                return $this->handlePartialResponse($response, $retries);
             }
+
             if($retries == 0) {
                 $this->deleteFileIfExist("$this->filePath.part");
             }
-            $this->savingFileFromResponse($response, false, false);
+
+            if ($response->getStatusCode() == 200) {
+                $this->makePath($this->filePath);
+                $this->savingFileFromResponse($response, false, false);
+            }
+
             Log::debug("log", " retries: $retries, saving file, location:end of method for RetryMiddleware " . $response->getStatusCode() . PHP_EOL);
             return false;
 
@@ -152,12 +147,39 @@ class ClientResume implements ClientResumeInterface
         }
     }
 
+    private function handlePartialResponse(ResponseInterface $response, $retries): bool
+    {
+        list($startRange, $endRange, $filesize) = $this->parseResponseHeaderRange($response);
+        if($startRange == 0) {
+            $this->makePath($this->filePath);
+        }
+
+        if ($endRange + 1 == $filesize) {
+            Log::debug("log", " download finished, times: $retries" . PHP_EOL);
+            $this->savingFileFromResponse($response);
+            rename("$this->filePath.part", $this->filePath);
+            return false;
+        }
+        Log::debug("log", " saving partial data times: $retries" . PHP_EOL);
+        $this->savingFileFromResponse($response);
+        return $this->isRangeUpdated($retries, $endRange);
+    }
+
+    private function parseResponseHeaderRange(ResponseInterface $response): array
+    {
+        $rangeHeader = $response->getHeader("Content-Range")[0];
+        list($rangeUnit, $rangeData) = explode(" ", $rangeHeader);
+        list($range, $filesize) = explode("/", $rangeData);
+        list($start, $end) = explode("-", $range);
+        return [$start, $end, $filesize];
+    }
+
     private function isRangeUpdated($retries, $endRange): bool
     {
         if(is_int($retries/5) ) {
             if($this->prevStartRange == $endRange) {
                 unlink("$this->filePath.part");
-                Log::debug("log", "no range was updated, it could be middleware order" . PHP_EOL);
+                Log::debug("log", "range wasn't updated, it could be a wrong middleware order" . PHP_EOL);
                 return false;
             }
             $this->prevStartRange = $endRange;
@@ -166,15 +188,6 @@ class ClientResume implements ClientResumeInterface
     }
 
 
-    private function parseResponseHeaderRange(ResponseInterface $response): array
-    {
-        $rangeHeader = $response->getHeader("Content-Range")[0];
-        list($rangeUnit, $rangeData) = explode(" ", $rangeHeader);
-        list($range, $filesize) = explode("/", $rangeData);
-        list($start, $end) = explode("-", $range);
-        return [$end, $filesize];
-    }
-
     private function getRangeForRequest()
     {
         if (is_file("$this->filePath.part")) {
@@ -182,11 +195,11 @@ class ClientResume implements ClientResumeInterface
             $rangeStart = filesize("$this->filePath.part");
             $rangeEnd   = $rangeStart + $this->downloadChunkSize;
             $range = "$this->rangeUnit=$rangeStart-$rangeEnd";
-            Log::debug("log", "filePath exist, setting range: $range");
+            Log::debug("log", "partial file exist, setting range: $range");
             return $range;
         }
         $range = "$this->rangeUnit=0-$this->downloadChunkSize";
-        Log::debug("log", "filePath doesn't exist, setting range: $range");
+        Log::debug("log", "partial file doesn't exist, setting range: $range");
         return $range;
     }
 

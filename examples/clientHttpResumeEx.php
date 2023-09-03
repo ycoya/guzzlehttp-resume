@@ -1,11 +1,11 @@
 <?php
 
-use Ycoya\GuzzleHttpResume\ClientHttp;
+use Ycoya\GuzzleHttpResume\ClientHttpResume;
 
 // var_dump(__DIR__);exit;
 require '../vendor/autoload.php';
 
-$client = new ClientHttp(['base_uri' => 'https://www.google.com']);
+$client = new ClientHttpResume(['base_uri' => 'https://www.google.com']);
 try {
    $res = $client->request('GET', '/redirect/3', ['allow_redirects' => false, 'http_errors' => false, 'connect_timeout' => 3.14]);
    echo $res->getStatusCode();

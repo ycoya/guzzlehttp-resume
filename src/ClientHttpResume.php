@@ -5,7 +5,7 @@ namespace Ycoya\GuzzleHttpResume;
 use GuzzleHttp\Client;
 
 
-class ClientHttp extends Client
+class ClientHttpResume extends Client
 {
 
     public function downloadResume($method, $url, $options = [])
