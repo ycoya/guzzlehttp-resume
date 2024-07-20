@@ -91,8 +91,8 @@ class ClientResume implements ClientResumeInterface
 
     private function addRequiredMiddleware()
     {
-        $this->stack->after('prepare_body',Middleware::retry($this->reTry(), $this->delayBetweenRequest()), 'resume_download');
-        $this->stack->after('resume_download',Middleware::mapRequest($this->requestMiddleware()), 'update_range_header');
+        $this->stack->after('prepare_body', Middleware::retry($this->reTry(), $this->delayBetweenRequest()), 'resume_download');
+        $this->stack->after('resume_download', Middleware::mapRequest($this->requestMiddleware()), 'update_range_header');
     }
 
     protected function requestMiddleware()
@@ -125,6 +125,12 @@ class ClientResume implements ClientResumeInterface
                 return $this->handlePartialResponse($response, $retries);
             }
 
+            if ($response->getStatusCode() == 416) {
+                Log::debug("log", " retries: $retries, StatusCode: 416 Range Not Satisfiable. ServerResponse:" . PHP_EOL);
+                Log::debug("log", $response->getBody());
+                return false;
+            }
+
             if($retries == 0) {
                 $this->deleteFileIfExist("$this->filePath.part");
             }
@@ -133,6 +139,7 @@ class ClientResume implements ClientResumeInterface
                 $this->makePath($this->filePath);
                 $this->savingFileFromResponse($response, false, false);
             }
+
 
             Log::debug("log", " retries: $retries, saving file, location:end of method for RetryMiddleware " . $response->getStatusCode() . PHP_EOL);
             return false;
@@ -223,7 +230,7 @@ class ClientResume implements ClientResumeInterface
     {
         $request = $stats->getRequest();
         $response = $stats->getResponse();
-        $data = "-- url: " .  $request->getUri() . " headers: " . json_encode($request->getHeaders()) . "----- responseHeaders: " . json_encode($response->getHeaders());
+        $data = "-- url: " .  $request->getUri() . " headers: " . json_encode($request->getHeaders()) . " -----responseStatus:"  . $response?->getStatusCode() . " responseHeaders: " . json_encode($response?->getHeaders()  );
         if (Log::$debugVerbose) {
             $data .= " body: " . $response->getBody() . PHP_EOL;
         } else {
