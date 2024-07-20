@@ -11,6 +11,7 @@ use GuzzleHttp\TransferStats;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Ycoya\GuzzleHttpResume\Interfaces\ClientResumeInterface;
+use Ycoya\GuzzleHttpResume\Helpers\Utils;
 
 class ClientResume implements ClientResumeInterface
 {
@@ -148,7 +149,7 @@ class ClientResume implements ClientResumeInterface
             }
 
             if ($response->getStatusCode() == 200) {
-                $this->makePath($this->filePath);
+                Utils::makePath($this->filePath);
                 $this->savingFileFromResponse($response, false, false);
             }
 
@@ -170,7 +171,7 @@ class ClientResume implements ClientResumeInterface
     {
         list($startRange, $endRange, $filesize) = $this->parseResponseHeaderRange($response);
         if($startRange == 0) {
-            $this->makePath($this->filePath);
+            Utils::makePath($this->filePath);
         }
 
         if ($endRange + 1 == $filesize) {
@@ -252,21 +253,4 @@ class ClientResume implements ClientResumeInterface
         Log::debug($statsPath, $data);
     }
 
-    // gotten from internet.
-    private function makePath($path)
-    {
-        $dir = pathinfo($path, PATHINFO_DIRNAME);
-
-        if (is_dir($dir)) {
-            return true;
-        } else {
-            if ($this->makePath($dir)) {
-                if (mkdir($dir)) {
-                    chmod($dir, 0777);
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
 }

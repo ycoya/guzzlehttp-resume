@@ -3,6 +3,7 @@ namespace Ycoya\GuzzleHttpResume;
 
 
 use Carbon\Carbon;
+use Ycoya\GuzzleHttpResume\Helpers\Utils;
 
 class Log
 {
@@ -27,7 +28,7 @@ class Log
 
     private static function _debug($folderName, $info)
     {
-        self::makePath("debug/$folderName.log");
+        Utils::makePath("debug/$folderName.log");
         $date = self::getDate('Y-m-d H:i:s');
         $dateLog = self::getDate('Y-m-d');
         file_put_contents("debug/$folderName-$dateLog.log", "$date----$info" . PHP_EOL, FILE_APPEND);
@@ -35,24 +36,6 @@ class Log
 
 
 
-    protected static function makePath($path)
-    {
-        $dir = pathinfo($path, PATHINFO_DIRNAME);
-
-        if (is_dir($dir)) {
-            return true;
-        }
-
-        if (self::makePath($dir)) {
-            if (mkdir($dir)) {
-                chmod($dir, 0777);
-                return true;
-            }
-        }
-
-
-        return false;
-    }
 
     private static function getDate($format)
     {
