@@ -23,6 +23,8 @@ class ClientResume implements ClientResumeInterface
 
     public int $downloadChunkSize = 50 * 1024 * 1024;
 
+    protected string $partialExtension = "part";
+
     protected string $rangeUnit = "bytes";
 
     private int $prevStartRange = 0;
@@ -68,6 +70,16 @@ class ClientResume implements ClientResumeInterface
     public function setDebug(bool $debug)
     {
         Log::$debug = $debug;
+    }
+
+    public function setPartialExtension(string $ext): void
+    {
+        $this->partialExtension = $ext;
+    }
+
+    public function getPartialExtension(): string
+    {
+        return $this->partialExtension;
     }
 
     public function resume($method, $url, $options = []): void
@@ -132,7 +144,7 @@ class ClientResume implements ClientResumeInterface
             }
 
             if($retries == 0) {
-                $this->deleteFileIfExist("$this->filePath.part");
+                $this->deleteFileIfExist("$this->filePath.$this->partialExtension");
             }
 
             if ($response->getStatusCode() == 200) {
@@ -164,7 +176,7 @@ class ClientResume implements ClientResumeInterface
         if ($endRange + 1 == $filesize) {
             Log::debug("log", " download finished, times: $retries" . PHP_EOL);
             $this->savingFileFromResponse($response);
-            rename("$this->filePath.part", $this->filePath);
+            rename("$this->filePath.$this->partialExtension", $this->filePath);
             return false;
         }
         Log::debug("log", " saving partial data times: $retries" . PHP_EOL);
@@ -185,8 +197,8 @@ class ClientResume implements ClientResumeInterface
     {
         if(is_int($retries/5) ) {
             if($this->prevStartRange == $endRange) {
-                unlink("$this->filePath.part");
-                Log::debug("log", "range wasn't updated, it could be a wrong middleware order" . PHP_EOL);
+                $this->deleteFileIfExist("$this->filePath.$this->partialExtension");
+                Log::debug("log", "range wasn't updated, it could be a wrong middleware order or an error saving partial file" . PHP_EOL);
                 return false;
             }
             $this->prevStartRange = $endRange;
@@ -197,9 +209,9 @@ class ClientResume implements ClientResumeInterface
 
     private function getRangeForRequest()
     {
-        if (is_file("$this->filePath.part")) {
+        if (is_file("$this->filePath.$this->partialExtension")) {
             clearstatcache();
-            $rangeStart = filesize("$this->filePath.part");
+            $rangeStart = filesize("$this->filePath.$this->partialExtension");
             $rangeEnd   = $rangeStart + $this->downloadChunkSize;
             $range = "$this->rangeUnit=$rangeStart-$rangeEnd";
             Log::debug("log", "partial file exist, setting range: $range");
@@ -223,7 +235,7 @@ class ClientResume implements ClientResumeInterface
 
     private function savingFileFromResponse(ResponseInterface $response, bool $partial = true, bool $fileAppend = true): void
     {
-        file_put_contents($partial ? "$this->filePath.part" : $this->filePath, $response->getBody(), $fileAppend ? FILE_APPEND : 0);
+        file_put_contents($partial ? "$this->filePath.$this->partialExtension" : $this->filePath, $response->getBody(), $fileAppend ? FILE_APPEND : 0);
     }
 
     private function dumpStats(TransferStats $stats)

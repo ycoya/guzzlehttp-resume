@@ -22,6 +22,7 @@ class ClientHttpResume extends Client
         ($options['clientResume']['chunkSize'] ?? null) ? $clientResume->downloadChunkSize = $options['clientResume']['chunkSize'] : null;
         ($options['clientResume']['debug'] ?? null) ? $clientResume->setDebug($options['clientResume']['debug']) : null;
         ($options['clientResume']['filePath'] ?? null) ? $clientResume->setfilePath($options['clientResume']['filePath']) : null;
+        ($options['clientResume']['partialExt'] ?? null) ? $clientResume->setPartialExtension($options['clientResume']['partialExt']) : null;
         unset($options['clientResume']);
     }
 }
