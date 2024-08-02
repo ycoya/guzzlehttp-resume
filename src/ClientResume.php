@@ -38,8 +38,7 @@ class ClientResume implements ClientResumeInterface
         if (!$this->client) {
             $this->client = new Client();
         }
-        $this->stack = HandlerStack::create();
-        $this->addRequiredMiddleware();
+        $this->setHandler(HandlerStack::create());
     }
 
     public function setClient(Client $client)
@@ -71,6 +70,12 @@ class ClientResume implements ClientResumeInterface
     public function setDebug(bool $debug)
     {
         Log::$debug = $debug;
+    }
+
+    public function setDebugVerbose(bool $debug)
+    {
+        Log::$debug = $debug;
+        Log::$debugVerbose = $debug;
     }
 
     public function setPartialExtension(string $ext): void
@@ -113,8 +118,9 @@ class ClientResume implements ClientResumeInterface
         return function (RequestInterface $request) {
             Log::debug("log", "starting request middleware");
             if (empty($this->filePath)) {
-                Log::debug("log", "file wasn't set, composing filename from request: $this->filePath");
+                Log::debug("log", "file wasn't set, composing filename from request");
                 $this->createFilePathFromRequest($request);
+                Log::debug("log", "filename created: $this->filePath");
             }
             return $request->withHeader("Range", $this->getRangeForRequest());
         };
@@ -245,10 +251,10 @@ class ClientResume implements ClientResumeInterface
         $response = $stats->getResponse();
         $data = "-- url: " .  $request->getUri() . " headers: " . json_encode($request->getHeaders()) . " -----responseStatus:"  . $response?->getStatusCode() . " responseHeaders: " . json_encode($response?->getHeaders()  );
         if (Log::$debugVerbose) {
-            $data .= " body: " . $response->getBody() . PHP_EOL;
-        } else {
-            $data .= PHP_EOL;
+            $data .= " body: " . $response?->getBody();
         }
+        $data .= PHP_EOL;
+
         $statsPath = "stats/guzzle_stats";
         Log::debug($statsPath, $data);
     }

@@ -1,9 +1,8 @@
 <?php
 
-use Ycoya\GuzzleHttpResume\ClientHttpResume;
-
-// var_dump(__DIR__);exit;
 require '../vendor/autoload.php';
+
+use Ycoya\GuzzleHttpResume\ClientHttpResume;
 
 $client = new ClientHttpResume(['base_uri' => 'https://www.google.com']);
 try {
@@ -26,7 +25,7 @@ try {
     echo $th;
 }
 
-$url = "http://virtualrepomaven2.com.test?file=V_20230702_195006_ES6.mp4";
+$url = "http://video.com.test?file=V_20230702_195006_ES6.mp4";
 $options = [
    'clientResume' => [
       'chunkSize'=>10 * 1024 *1024,

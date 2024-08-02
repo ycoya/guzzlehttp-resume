@@ -1,5 +1,5 @@
 {
-    "name": "ycoya/guzzle-http-resume",
+    "name": "ycoya/guzzlehttp-resume",
     "description": "To download by range a resource and be able to resume the download if it has been interrupted.",
     "type": "library",
     "require": {
