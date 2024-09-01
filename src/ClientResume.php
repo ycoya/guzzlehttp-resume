@@ -54,6 +54,7 @@ class ClientResume implements ClientResumeInterface
     public function setHandler(HandlerStack $handlerStack)
     {
         $this->stack = $handlerStack;
+        $this->removeRequiredMiddleware();
         $this->addRequiredMiddleware();
     }
 
@@ -107,24 +108,31 @@ class ClientResume implements ClientResumeInterface
     }
 
 
+    private function removeRequiredMiddleware()
+    {
+        $this->stack->remove('resume_download');
+        $this->stack->remove('update_range_header');
+    }
+
     private function addRequiredMiddleware()
     {
-        $this->stack->after('prepare_body', Middleware::retry($this->reTry(), $this->delayBetweenRequest()), 'resume_download');
-        $this->stack->after('resume_download', Middleware::mapRequest($this->requestMiddleware()), 'update_range_header');
+        $this->stack->after('http_errors', Middleware::retry($this->reTry(), $this->delayBetweenRequest()), 'resume_download');
+        $this->stack->after('prepare_body', Middleware::mapRequest($this->requestMiddleware()), 'update_range_header');
     }
 
     protected function requestMiddleware()
     {
         return function (RequestInterface $request) {
-            Log::debug("log", "starting request middleware");
+            Log::debug("log", "::requestMiddleware: starting request middleware, url: " . $request->getUri());
             if (empty($this->filePath)) {
-                Log::debug("log", "file wasn't set, composing filename from request");
+                Log::debug("log", "::requestMiddleware: file wasn't set, composing filename from request");
                 $this->createFilePathFromRequest($request);
-                Log::debug("log", "filename created: $this->filePath");
+                Log::debug("log", "::requestMiddleware: filename created: $this->filePath");
             }
             return $request->withHeader("Range", $this->getRangeForRequest());
         };
     }
+
 
     protected function reTry()
     {
@@ -134,23 +142,29 @@ class ClientResume implements ClientResumeInterface
             ResponseInterface $response = null,
             \Exception $exception = null
         ) {
-            Log::debug("log", "starting retry middleware");
+            Log::debug("log", "::reTry: starting retry middleware, url: " . $request->getUri());
             if(is_null($response)) {
-                Log::debug("log", "response null, possible error in connection");
+                Log::debug("log", "::reTry: response null, possible error in connection");
+                return false;
+
+            }
+            if ($response->getStatusCode() >= 300 && $response->getStatusCode() <= 399) {
+                Log::debug("log", "::reTry: retries: $retries, RetryMiddleware and status code redirection " . $response->getStatusCode() . PHP_EOL);
                 return false;
             }
 
             if ($response->getStatusCode() == 206) {
+                Log::debug("log", "::reTry: handlePartialResponse, url: " . $request->getUri());
                 return $this->handlePartialResponse($response, $retries);
             }
 
             if ($response->getStatusCode() == 416) {
-                Log::debug("log", " retries: $retries, StatusCode: 416 Range Not Satisfiable. ServerResponse:" . PHP_EOL);
-                Log::debug("log", $response->getBody());
+                Log::debug("log", "::reTry:  retries: $retries, StatusCode: 416 Range Not Satisfiable. ServerResponse:");
                 return false;
             }
 
             if($retries == 0) {
+                Log::debug("log","::reTry: deleting file $this->filePath.$this->partialExtension");
                 $this->deleteFileIfExist("$this->filePath.$this->partialExtension");
             }
 
@@ -160,7 +174,7 @@ class ClientResume implements ClientResumeInterface
             }
 
 
-            Log::debug("log", " retries: $retries, saving file, location:end of method for RetryMiddleware " . $response->getStatusCode() . PHP_EOL);
+            Log::debug("log", "::reTry:  retries: $retries, saving file, location:end of method for RetryMiddleware " . $response->getStatusCode());
             return false;
 
         };
@@ -181,12 +195,12 @@ class ClientResume implements ClientResumeInterface
         }
 
         if ($endRange + 1 == $filesize) {
-            Log::debug("log", " download finished, times: $retries" . PHP_EOL);
+            Log::debug("log", "::handlePartialResponse: download finished, times: $retries, $startRange-$endRange/$filesize");
             $this->savingFileFromResponse($response);
             rename("$this->filePath.$this->partialExtension", $this->filePath);
             return false;
         }
-        Log::debug("log", " saving partial data times: $retries" . PHP_EOL);
+        Log::debug("log", "::handlePartialResponse: saving partial data times: $retries, $startRange-$endRange/$filesize");
         $this->savingFileFromResponse($response);
         return $this->isRangeUpdated($retries, $endRange);
     }
@@ -205,7 +219,7 @@ class ClientResume implements ClientResumeInterface
         if(is_int($retries/5) ) {
             if($this->prevStartRange == $endRange) {
                 $this->deleteFileIfExist("$this->filePath.$this->partialExtension");
-                Log::debug("log", "range wasn't updated, it could be a wrong middleware order or an error saving partial file" . PHP_EOL);
+                Log::debug("log", "::isRangeUpdated: range wasn't updated, it could be a wrong middleware order or an error saving partial file");
                 return false;
             }
             $this->prevStartRange = $endRange;
@@ -221,11 +235,11 @@ class ClientResume implements ClientResumeInterface
             $rangeStart = filesize("$this->filePath.$this->partialExtension");
             $rangeEnd   = $rangeStart + $this->downloadChunkSize;
             $range = "$this->rangeUnit=$rangeStart-$rangeEnd";
-            Log::debug("log", "partial file exist, setting range: $range");
+            Log::debug("log", "::getRangeForRequest: partial file exist, setting range: $range");
             return $range;
         }
         $range = "$this->rangeUnit=0-$this->downloadChunkSize";
-        Log::debug("log", "partial file doesn't exist, setting range: $range");
+        Log::debug("log", "::getRangeForRequest: partial file doesn't exist, setting range: $range");
         return $range;
     }
 
@@ -249,7 +263,7 @@ class ClientResume implements ClientResumeInterface
     {
         $request = $stats->getRequest();
         $response = $stats->getResponse();
-        $data = "-- url: " .  $request->getUri() . " headers: " . json_encode($request->getHeaders()) . " -----responseStatus:"  . $response?->getStatusCode() . " responseHeaders: " . json_encode($response?->getHeaders()  );
+        $data = "::dumpStats  url: " .  $request->getUri() . " headers: " . json_encode($request->getHeaders()) . " -----responseStatus:"  . $response?->getStatusCode() . " responseHeaders: " . json_encode($response?->getHeaders()  );
         if (Log::$debugVerbose) {
             $data .= " body: " . $response?->getBody();
         }
