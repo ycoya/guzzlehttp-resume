@@ -28,10 +28,10 @@ class Log
 
     private static function _debug($folderName, $info)
     {
-        Utils::makePath("debug/$folderName.log");
+        Utils::makePath("debugFolder/$folderName.log");
         $date = self::getDate('Y-m-d H:i:s');
         $dateLog = self::getDate('Y-m-d');
-        file_put_contents("debug/$folderName-$dateLog.log", "$date----$folderName$info" . PHP_EOL, FILE_APPEND);
+        file_put_contents("debugFolder/$folderName-$dateLog.log", "$date----$folderName$info" . PHP_EOL, FILE_APPEND);
     }
 
 
