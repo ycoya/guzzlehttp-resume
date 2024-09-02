@@ -91,12 +91,12 @@ use GuzzleHttp\Client;
 
 $guzzleClient = new Client(['base_uri' => 'http://httpbin.org']);
 $options = [
+    'handler'   => GuzzleHttp\HandlerStack::create(),
    'clientResume' => [
       'client'   => $guzzleClient,
       'chunkSize'=> 10 * 1024 *1024,
       'filePath' => "descarga/video.mp4",
       'partialExt' => "partFile",
-      'handler'   => GuzzleHttp\HandlerStack::create(),
       'debug'   => true,
       'debugVerbose'   => true,
       ]
@@ -113,11 +113,11 @@ use Ycoya\GuzzleHttpResume\ClientHttpResume;
 
 $options = [
    'base_uri' => 'http://httpbin.org',
+   'handler'   => GuzzleHttp\HandlerStack::create(),
    'clientResume' => [
       'chunkSize'=> 10 * 1024 *1024,
       'filePath' => "descarga/video.mp4",
       'partialExt' => "partFile",
-      'handler'   => GuzzleHttp\HandlerStack::create(),
       'debug'   => true
       ]
    ];
@@ -133,6 +133,7 @@ When using **ClientHttpResume** class, you have to set a key named `clientResume
 In fact, it is not necessary to set a GuzzleClient object. When **ClientHttpResume** or **ClientResume**  is created, an object for GuzzleClient
 is created too, so if you need to pass options you set it outside of `clientResume` key option.
 Let assume we need to set base uri option to guzzleClient. It can be set as the example above.
+And the handler too.
 
 ```bash
 <?php
@@ -228,7 +229,7 @@ $client->downloadResume('GET', $url, $options);
 
 #handler option
 
-This option is to set a GuzzleHttp\HandlerStack if needed. To know how to build it, see the docs from [guzzlehttp/guzzle](https://docs.guzzlephp.org/en/stable/handlers-and-middleware.html)
+This option is to set a GuzzleHttp\HandlerStack if needed. To know how to build it, see the docs from [guzzlehttp/guzzle](https://docs.guzzlephp.org/en/stable/handlers-and-middleware.html). To pass this option is outside from ClientResume key. It´s set as a guzzle option. The fact we state here is because this handler is modified internally to add own middlewares to be able to download by chunks.
 
 ```bash
 <?php
@@ -239,9 +240,10 @@ $url = "https://video.com.test?file=V_20230702_195006_ES6.mp4";
 $handler =  GuzzleHttp\HandlerStack::create();
 
 $options = [
-   'clientResume' => [
            'handler' => $handler
-      ]
+           'clientResume' => [
+               ...
+            ]
    ];
 $client = new ClientHttpResume();
 $client->downloadResume('GET', $url, $options);
