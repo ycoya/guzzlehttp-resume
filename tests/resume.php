@@ -116,6 +116,32 @@ $tests = [
         expectSame(false, $history[1]['request']->hasHeader('Range'));
         expectSame(false, $history[1]['request']->hasHeader('If-Range'));
     },
+    'empty-file-after-range-rejected' => static function (string $path) {
+        $history = [];
+        download($path, [new Response(416, ['Content-Range' => 'bytes */0']), complete('')], $history);
+        expectDownload('', $path);
+        expectSame('bytes=0-3', $history[0]['request']->getHeaderLine('Range'));
+        expectSame(false, $history[1]['request']->hasHeader('Range'));
+    },
+    'saved-range-no-longer-exists' => static function (string $path) {
+        interruptDownload($path);
+        $history = [];
+        download($path, [new Response(416, ['Content-Range' => 'bytes */2']), complete('12')], $history);
+        expectDownload('12', $path);
+        expectSame('"v1"', $history[0]['request']->getHeaderLine('If-Range'));
+        expectSame(false, $history[1]['request']->hasHeader('Range'));
+        expectSame(false, $history[1]['request']->hasHeader('If-Range'));
+    },
+    'range-fallback-is-attempted-once' => static function (string $path) {
+        $history = [];
+        $rejected = new Response(416, ['Content-Range' => 'bytes */0']);
+        expectException(GuzzleHttp\Exception\ClientException::class, static function () use ($path, $rejected, &$history) {
+            download($path, [$rejected, $rejected], $history);
+        });
+        expectSame(2, count($history));
+        expectSame(false, $history[1]['request']->hasHeader('Range'));
+        expectSame(false, file_exists($path));
+    },
     'old-partial-without-checkpoint' => static function (string $path) {
         file_put_contents($path . '.part', 'ABCD');
         $history = [];
