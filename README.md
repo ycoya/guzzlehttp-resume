@@ -3,6 +3,14 @@
 Guzzlehttp-resume is a wrapper for guzzlehttp to allow downloads by chunks. If a download is interrupted it can be resume later, without the need to start the download again from zero.
 This is possible only if the server support partial requests.
 
+Reusing saved bytes requires a strong `ETag` from the server. Keep the `.part`
+file and its `.part.json` checkpoint together. A partial from an older version
+without a checkpoint starts over. If the server changes the file or cannot
+confirm its version, the client requests a full download. Use one downloader
+per destination path.
+
+Run the download tests with `composer install` followed by `php tests/resume.php`.
+
 It has two classes **ClientResume** and **ClientHttpResume**. The difference of these two classes is that **ClientResume** has methods
 to set actions and settings, while ClientHttpResume is a wrapper of the first that allows set options similar to
 guzzlehttp.
