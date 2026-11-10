@@ -182,6 +182,11 @@ class ClientResume implements ClientResumeInterface
             if ($response->getStatusCode() === 206) {
                 return $this->handlePartialResponse($response);
             }
+            if ($response->getStatusCode() === 416 && $this->requestedRange !== null) {
+                // An empty or shortened file may no longer satisfy the requested range.
+                $this->requestComplete = true;
+                return true;
+            }
             if ($response->getStatusCode() === 200) {
                 $this->saveCompleteResponse($response);
             }
